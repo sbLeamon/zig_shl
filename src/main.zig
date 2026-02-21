@@ -12,7 +12,7 @@ pub fn main() !void {
     const stdin = &stdin_reader.interface;
 
     var shell = shl.Shell{ .value = 2 };
-    try shell.parse(stdin, stdout);
+    try shell.loop(stdin, stdout);
 }
 
 // test "initial prompt is '$'" {
