@@ -1,5 +1,5 @@
 const std = @import("std");
-const shl = @import("shl.zig");
+const Shell = @import("shl.zig");
 
 pub fn main() !void {
     // Prints to stderr, ignoring potential errors.
@@ -11,8 +11,7 @@ pub fn main() !void {
     var stdin_reader = std.fs.File.stdin().reader(&stdin_buffer);
     const stdin = &stdin_reader.interface;
 
-    var shell = shl.Shell{ .value = 2 };
-    try shell.loop(stdin, stdout);
+    try Shell.loop(stdin, stdout);
 }
 
 // test "initial prompt is '$'" {
