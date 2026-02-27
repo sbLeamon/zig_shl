@@ -1,7 +1,10 @@
 const std = @import("std");
+const Cd = @import("cd.zig");
+const Ls = @import("ls.zig");
+
 const Shell = @This();
 
-const Colors = struct {
+pub const Colors = struct {
     RED: []const u8,
     GREEN: []const u8,
     BLUE: []const u8,
@@ -33,7 +36,7 @@ pub fn loop(stdin: *std.Io.Reader, stdout: *std.Io.Writer) !void {
     var cwd_buffer: [1024]u8 = undefined;
     const cwd = try std.process.getCwd(&cwd_buffer);
 
-    const colors = &Colors.background();
+    const colors: *Colors = &.background();
     try Shell.print_prompt(stdout, cwd, colors);
 
     // read command
@@ -79,6 +82,11 @@ fn parse_command(line: []const u8, stdout: *std.Io.Writer) ![]const u8 {
 
     if (std.mem.eql(u8, trimmed_line, "exit")) {
         return trimmed_line;
+    }
+
+    if (std.mem.eql(u8, trimmed_line, "ls")) {
+        try Ls.display_items(stdout);
+        return "";
     }
 
     try stdout.print("{s}: is not a command\n", .{trimmed_line});
