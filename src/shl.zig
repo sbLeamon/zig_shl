@@ -36,7 +36,7 @@ pub fn loop(stdin: *std.Io.Reader, stdout: *std.Io.Writer) !void {
     var cwd_buffer: [1024]u8 = undefined;
     const cwd = try std.process.getCwd(&cwd_buffer);
 
-    const colors: *Colors = &.background();
+    const colors = &Colors.background();
     try Shell.print_prompt(stdout, cwd, colors);
 
     // read command
