@@ -77,6 +77,8 @@ fn print_prompt(stdout: *std.Io.Writer, cwd: []const u8, colors: *const Colors) 
     try stdout.flush();
 }
 
+// TODO: extract commands processing logic from the functions
+//       functino should only return parsed commmand name string
 fn parse_command(line: []const u8, stdout: *std.Io.Writer) ![]const u8 {
     const trimmed_line = std.mem.trim(u8, line, "\r");
 

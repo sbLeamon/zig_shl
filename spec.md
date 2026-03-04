@@ -11,8 +11,10 @@
 - Shell should implement simple commands: `ls`, `cd`, `pwd`, `mkdir`, `rm`, `cp`, `mv`, `cat`, `echo`, `exit`, `help`, `clear`
 
 - Shell should handle invalid commands: return message in format `command_entered: command not found`
+- Shell should implement "plugin-like" architecture for commands
 
 ## Commands
 
 - Shell should handle `ls` command:
   - When user enters `ls`, **shl** displays list of files and folders in current folder
+  - `ls` displays table with columns: Type, Last time modified, Size, Name
