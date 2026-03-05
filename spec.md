@@ -18,3 +18,18 @@
 - Shell should handle `ls` command:
   - When user enters `ls`, **shl** displays list of files and folders in current folder
   - `ls` displays table with columns: Type, Last time modified, Size, Name
+  - `ls` formating rules:
+    - columns width should be adjusted to content
+    - gap between columns should be 4 spaces
+  - `ls` formating:
+Type    Last modified      Size         Name
+d       Mar 4 0:34:24      100020000    .git
+f       Feb 19 17:40:58    10002        .gitignore
+d       Mar 4 0:34:24      10002        .zig-cache
+f       Feb 20 12:05:48    10002        build.zig
+f       Feb 19 15:14:53    10002        build.zig.zon
+f       Feb 19 18:14:35    10002        README.md
+f       Mar 2 9:55:10      10002        spec.md
+d       Mar 4 0:34:24      10002        src
+f       Mar 2 9:58:46      10002        TODO_TASKS.md
+d       Mar 4 0:34:24      10002        zig-out

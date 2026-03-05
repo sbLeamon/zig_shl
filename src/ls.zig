@@ -1,7 +1,65 @@
 const std = @import("std");
 const shell = @import("shl.zig");
+const ArrayList = std.ArrayList;
 
 const Ls = @This();
+
+const FileData = struct {
+    name: []const u8,
+    size: u64,
+    kind: std.fs.Dir.Entry.Kind,
+    mtime: u64,
+};
+
+const Table = struct {
+    gap: u5,
+    header: [4]TableFormating,
+    rows: [100][4][]const u8,
+
+    pub fn init(gap: u5, header: [4]TableFormating, rows: [100][4][]const u8) Table {
+        return .{
+            .gap = gap,
+            .header = header,
+            .rows = rows,
+        };
+    }
+
+    pub fn print_rows(self: *Table, writer: *std.io.Writer) !void {
+        for (self.rows) |row| {
+            for (row) |cell| {
+                try writer.print("{s}", .{cell});
+                var i: u8 = 0;
+                while (i < self.gap) : (i += 1) {
+                    try writer.print("{s}", .{" "});
+                }
+            }
+            try writer.print("\n", .{});
+        }
+    }
+
+    pub fn print_header(self: *Table, writer: *std.io.Writer) !void {
+        for (self.header) |item| {
+            try writer.print("{s}", .{item.get()});
+            var i: u8 = 0;
+            while (i < self.gap) : (i += 1) {
+                try writer.print("{s}", .{" "});
+            }
+        }
+    }
+
+    // pub fn print(self: Table, writer: *std.io.Writer) !void {
+    //     for (self.header) |header| {
+    //         try writer.print("{s}{s}", .{ header, " " ** self.gap });
+    //     }
+    //     try writer.print("\n", .{});
+    //     for (self.rows) |row| {
+    //         for (row) |cell| {
+    //             try writer.print("{s}{s}", .{ cell, " " ** self.gap });
+    //         }
+    //         try writer.print("\n", .{});
+    //     }
+    // }
+};
 
 const TableFormating = enum {
     time_format,
@@ -85,27 +143,64 @@ pub fn display_items(stdout: *std.io.Writer) !void {
     defer dir.close();
 
     var it = dir.iterate();
-    const dir_color = shell.Colors.foreground().BLUE;
-    const reset_color = shell.Colors.foreground().RESET;
 
-    try stdout.print(TableFormating.getHeader(), .{});
+    var longest_size: usize = 0;
+    var longest_name: usize = 0;
+    var stats: [100]FileData = undefined;
 
+    // Get files data
+    var i: usize = 0;
     while (try it.next()) |entry| {
-        if (entry.kind == .directory) {
-            const stat = try dir.stat();
-            const date_time: DateTime = .init(@intCast(@divTrunc(stat.mtime, 1000000000)));
-            var buf: [1024]u8 = undefined;
-            const time_formated = try std.fmt.bufPrint(buf[0..1024], "{s} {d} {d}:{:0>2}:{:0>2}", .{ date_time.month, date_time.day, date_time.hour, date_time.minutes, date_time.seconds });
-            try stdout.print("{s}d{s}{s}{s}{s}\n", .{ dir_color, " " ** 7, time_formated, entry.name, reset_color });
-        } else if (entry.kind == .file) {
-            const stat = try dir.statFile(entry.name);
-            const date_time: DateTime = .init(@intCast(@divTrunc(stat.mtime, 1000000000)));
-            var buf: [1024]u8 = undefined;
-            const time_formated = try std.fmt.bufPrint(buf[0..1024], "{s} {d} {d}:{:0>2}:{:0>2}", .{ date_time.month, date_time.day, date_time.hour, date_time.minutes, date_time.seconds });
-            try stdout.print("f{s}{s}{s}\n", .{ " " ** 7, time_formated, entry.name });
-        }
+        const stat = try dir.statFile(entry.name);
+
+        stats[i] = FileData{
+            .name = entry.name,
+            .size = @intCast(stat.size),
+            .kind = stat.kind,
+            .mtime = @intCast(stat.mtime),
+        };
+
+        if (entry.name.len > longest_name) longest_name = entry.name.len;
+        if (stats[i].size > longest_size) longest_size = stats[i].size;
+        i += 1;
     }
 
+    const header_items = [_]TableFormating{
+        .header_type,
+        .header_time,
+        .header_size,
+        .header_name,
+    };
+    const gap = TableFormating.space.get().len;
+    var rows: [100][4][]const u8 = undefined;
+
+    // Colors
+    // const dir_color = shell.Colors.foreground().BLUE;
+    // const reset_color = shell.Colors.foreground().RESET;
+
+    for (stats[0..i]) |stat| {
+        const type_str: []const u8 = switch (stat.kind) {
+            .directory => "d",
+            .file => "f",
+            else => "?",
+        };
+
+        // format time
+        const date_time: DateTime = .init(@intCast(@divTrunc(stat.mtime, 1000000000)));
+        var buf: [1024]u8 = undefined;
+        const time_formated = try std.fmt.bufPrint(buf[0..1024], "{s} {d} {d}:{:0>2}:{:0>2}", .{ date_time.month, date_time.day, date_time.hour, date_time.minutes, date_time.seconds });
+
+        rows[i] = [_][]const u8{ type_str, " " ** 7, time_formated, stat.name };
+    }
+
+    // print table
+    var table: Table = .init(
+        @intCast(gap),
+        header_items,
+        rows,
+    );
+    try table.print_header(stdout);
+    try table.print_rows(stdout);
     try stdout.flush();
 }
 
