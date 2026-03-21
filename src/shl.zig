@@ -1,4 +1,5 @@
 const std = @import("std");
+
 const Cd = @import("cd.zig");
 const Ls = @import("ls.zig");
 
@@ -29,31 +30,38 @@ pub const Colors = struct {
 
 const PROMPT: []const u8 = ">";
 
-pub fn loop(stdin: *std.Io.Reader, stdout: *std.Io.Writer) !void {
+pub fn loop(stdin: *std.Io.Reader, stdout: *std.Io.Writer, io: *const std.Io) !void {
     var line: []u8 = undefined;
+    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+    defer _ = gpa.deinit();
+
+    var allocator = gpa.allocator();
 
     // display prompt
-    var cwd_buffer: [1024]u8 = undefined;
-    const cwd = try std.process.getCwd(&cwd_buffer);
+    var cwd_buffer: [:0]u8 = try std.process.currentPathAlloc(io.*, allocator);
+    defer allocator.free(cwd_buffer);
+
+    // _ = try std.Io.Dir.cwd().realPath(io.*, cwd_buffer[0..]);
+    std.debug.print("CWD: {s}", .{cwd_buffer[0..]});
 
     const colors = &Colors.background();
-    try Shell.print_prompt(stdout, cwd, colors);
+    try Shell.print_prompt(stdout, cwd_buffer, colors);
 
     // read command
     line = try stdin.takeDelimiter('\n') orelse unreachable;
 
     // parse command
-    var command: []const u8 = try Shell.parse_command(line, stdout);
+    var command: []const u8 = try Shell.parse_command(line, stdout, io);
 
     while (!std.mem.eql(u8, command, "exit")) {
         // display prompt
-        try Shell.print_prompt(stdout, cwd, colors);
+        try Shell.print_prompt(stdout, cwd_buffer, colors);
 
         // read command
         line = try stdin.takeDelimiter('\n') orelse unreachable;
 
         // parse command
-        command = try Shell.parse_command(line, stdout);
+        command = try Shell.parse_command(line, stdout, io);
 
         // TODO: you need to wipe out the buffer if u have SENSETIVE DATA
         // Here is a visual example of what happens in the background without @memset:
@@ -79,7 +87,8 @@ fn print_prompt(stdout: *std.Io.Writer, cwd: []const u8, colors: *const Colors) 
 
 // TODO: extract commands processing logic from the functions
 //       functino should only return parsed commmand name string
-fn parse_command(line: []const u8, stdout: *std.Io.Writer) ![]const u8 {
+fn parse_command(line: []const u8, stdout: *std.Io.Writer, io: *const std.Io) ![]const u8 {
+    _ = io;
     const trimmed_line = std.mem.trim(u8, line, "\r");
 
     if (std.mem.eql(u8, trimmed_line, "exit")) {
@@ -87,7 +96,7 @@ fn parse_command(line: []const u8, stdout: *std.Io.Writer) ![]const u8 {
     }
 
     if (std.mem.eql(u8, trimmed_line, "ls")) {
-        try Ls.display_items(stdout);
+        // try Ls.display_items(stdout, io);
         return "";
     }
 
