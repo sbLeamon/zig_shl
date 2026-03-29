@@ -42,7 +42,8 @@ pub fn loop(stdin: *std.Io.Reader, stdout: *std.Io.Writer, io: *const std.Io) !v
     defer allocator.free(cwd_buffer);
 
     // _ = try std.Io.Dir.cwd().realPath(io.*, cwd_buffer[0..]);
-    std.debug.print("CWD: {s}", .{cwd_buffer[0..]});
+    //
+    std.debug.print("CWD: {s}\n", .{cwd_buffer[0..]});
 
     const colors = &Colors.background();
     try Shell.print_prompt(stdout, cwd_buffer, colors);
@@ -88,7 +89,6 @@ fn print_prompt(stdout: *std.Io.Writer, cwd: []const u8, colors: *const Colors) 
 // TODO: extract commands processing logic from the functions
 //       functino should only return parsed commmand name string
 fn parse_command(line: []const u8, stdout: *std.Io.Writer, io: *const std.Io) ![]const u8 {
-    _ = io;
     const trimmed_line = std.mem.trim(u8, line, "\r");
 
     if (std.mem.eql(u8, trimmed_line, "exit")) {
@@ -96,7 +96,7 @@ fn parse_command(line: []const u8, stdout: *std.Io.Writer, io: *const std.Io) ![
     }
 
     if (std.mem.eql(u8, trimmed_line, "ls")) {
-        // try Ls.display_items(stdout, io);
+        try Ls.display_items(stdout, io);
         return "";
     }
 

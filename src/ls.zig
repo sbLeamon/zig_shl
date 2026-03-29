@@ -5,46 +5,55 @@ const ArrayList = std.ArrayList;
 const Ls = @This();
 
 const FileData = struct {
-    name: []const u8,
+    name: [256]u8,
+    name_len: usize,
     size: u64,
     kind: std.Io.File.Kind,
     mtime: u64,
 };
 
 const Table = struct {
+    writer: *std.Io.Writer,
+    rows_count: usize,
     gap: u5,
-    header: [4]TableFormating,
+    header: [4]HeaderItems,
     rows: [100][4][]const u8,
 
-    pub fn init(gap: u5, header: [4]TableFormating, rows: [100][4][]const u8) Table {
+    pub fn init(writer: *std.Io.Writer, rows_count: usize, gap: u5, header: [4]HeaderItems, rows: [100][4][]const u8) Table {
         return .{
+            .writer = writer,
+            .rows_count = rows_count,
             .gap = gap,
             .header = header,
             .rows = rows,
         };
     }
 
-    pub fn print_rows(self: *Table, writer: *std.Io.Writer) !void {
-        for (self.rows) |row| {
-            for (row) |cell| {
-                try writer.print("{s}", .{cell});
-                var i: u8 = 0;
-                while (i < self.gap) : (i += 1) {
-                    try writer.print("{s}", .{" "});
+    pub fn print_rows(self: *Table) !void {
+        var i: usize = 0;
+        while (i < self.rows_count) {
+            for (self.rows[i]) |cell| {
+                try self.writer.writeAll(cell);
+
+                var j: usize = 0;
+                while (j < self.gap) : (j += 1) {
+                    try self.writer.writeAll(" ");
                 }
             }
-            try writer.print("\n", .{});
+            try self.writer.print("\n", .{});
+            i += 1;
         }
     }
 
-    pub fn print_header(self: *Table, writer: *std.Io.Writer) !void {
+    pub fn print_header(self: *Table) !void {
         for (self.header) |item| {
-            try writer.print("{s}", .{item.get()});
+            try self.writer.writeAll(item.get());
             var i: u8 = 0;
             while (i < self.gap) : (i += 1) {
-                try writer.print("{s}", .{" "});
+                try self.writer.writeAll(" ");
             }
         }
+        try self.writer.writeAll("\n");
     }
 
     // pub fn print(self: Table, writer: *std.Io.Writer) !void {
@@ -61,7 +70,7 @@ const Table = struct {
     // }
 };
 
-const TableFormating = enum {
+const HeaderItems = enum {
     time_format,
     space,
     header_type,
@@ -69,7 +78,7 @@ const TableFormating = enum {
     header_size,
     header_name,
 
-    pub fn get(self: TableFormating) []const u8 {
+    pub fn get(self: HeaderItems) []const u8 {
         return switch (self) {
             .time_format => "Mmm d hh:mm:ss",
             .space => " ",
@@ -81,18 +90,18 @@ const TableFormating = enum {
     }
 
     pub fn getTypePadding() []const u8 {
-        const num_spaces = comptime (TableFormating.header_type.get().len - 1 + TableFormating.space.get().len);
+        const num_spaces = comptime (HeaderItems.header_type.get().len - 1 + HeaderItems.space.get().len);
         return " " ** num_spaces;
     }
 
     pub fn getHeader() []const u8 {
-        return TableFormating.header_type.get() ++
-            TableFormating.getTypePadding() ++
-            TableFormating.header_time.get() ++
-            TableFormating.space.get() ++
-            TableFormating.header_size.get() ++
-            TableFormating.space.get() ++
-            TableFormating.header_name.get() ++
+        return HeaderItems.header_type.get() ++
+            HeaderItems.getTypePadding() ++
+            HeaderItems.header_time.get() ++
+            HeaderItems.space.get() ++
+            HeaderItems.header_size.get() ++
+            HeaderItems.space.get() ++
+            HeaderItems.header_name.get() ++
             "\n";
     }
 };
@@ -146,39 +155,62 @@ pub fn display_items(stdout: *std.Io.Writer, io: *const std.Io) !void {
 
     var longest_size: usize = 0;
     var longest_name: usize = 0;
-    var stats: [100]FileData = undefined;
+    var stats: [128]FileData = std.mem.zeroes([128]FileData);
 
     // Get files data
     var i: usize = 0;
-    while (try it.next(io.*)) |entry| {
-        const stat = try dir.statFile(io.*, entry.name, .{ .follow_symlinks = true });
+    var rows_count: usize = 0;
 
-        stats[i] = FileData{
-            .name = entry.name,
-            .size = @intCast(stat.size),
-            .kind = stat.kind,
-            .mtime = @intCast(stat.mtime.toMilliseconds()),
-        };
+    while (try it.next(io.*)) |entry| {
+        var file_data: FileData = undefined;
+
+        if (entry.kind == .file) {
+            const stat = try dir.statFile(io.*, entry.name, .{ .follow_symlinks = true });
+            file_data = .{
+                .name = undefined,
+                .name_len = entry.name.len,
+                .size = @intCast(stat.size),
+                .kind = stat.kind,
+                .mtime = @intCast(if (stat.mtime.toMilliseconds() == 0) stat.ctime.toMilliseconds() else stat.mtime.toMilliseconds()),
+            };
+        } else {
+            file_data = .{
+                .name = undefined,
+                .name_len = entry.name.len,
+                .size = 0,
+                .kind = entry.kind,
+                .mtime = 0,
+            };
+        }
+
+        @memcpy(file_data.name[0..entry.name.len], entry.name[0..entry.name.len]);
+        stats[i] = file_data;
 
         if (entry.name.len > longest_name) longest_name = entry.name.len;
         if (stats[i].size > longest_size) longest_size = stats[i].size;
+
         i += 1;
+        rows_count += 1;
     }
 
-    const header_items = [_]TableFormating{
+    const header_items = [_]HeaderItems{
         .header_type,
         .header_time,
         .header_size,
         .header_name,
     };
-    const gap = TableFormating.space.get().len;
+    const gap = HeaderItems.space.get().len;
     var rows: [100][4][]const u8 = undefined;
 
     // Colors
     // const dir_color = shell.Colors.foreground().BLUE;
     // const reset_color = shell.Colors.foreground().RESET;
+    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+    var arena: std.heap.ArenaAllocator = .init(gpa.allocator());
+    defer arena.deinit();
+    const allocator = arena.allocator();
 
-    for (stats[0..i]) |stat| {
+    for (stats[0..i], 0..) |stat, index| {
         const type_str: []const u8 = switch (stat.kind) {
             .directory => "d",
             .file => "f",
@@ -186,21 +218,33 @@ pub fn display_items(stdout: *std.Io.Writer, io: *const std.Io) !void {
         };
 
         // format time
+        std.debug.print("stat.mtime: {d}\n", .{stat.mtime});
         const date_time: DateTime = .init(@intCast(@divTrunc(stat.mtime, 1000000000)));
-        var buf: [1024]u8 = undefined;
-        const time_formated = try std.fmt.bufPrint(buf[0..1024], "{s} {d} {d}:{:0>2}:{:0>2}", .{ date_time.month, date_time.day, date_time.hour, date_time.minutes, date_time.seconds });
+        const time_formated = try std.fmt.allocPrint(allocator, "{s} {d} {d}:{:0>2}:{:0>2}", .{ date_time.month, date_time.day, date_time.hour, date_time.minutes, date_time.seconds });
+        const name = try allocator.dupe(u8, stat.name[0..stat.name_len]);
 
-        rows[i] = [_][]const u8{ type_str, " " ** 7, time_formated, stat.name };
+        rows[index] = [_][]const u8{ type_str, " " ** 7, time_formated, name };
+
+        // std.debug.print("Iteration: {d}\nrow[0]: {s}{s}{s}{s}\n", .{ index, rows[0][0], rows[0][1], rows[0][2], rows[0][3] });
+        // if (index >= 1)
+        //     std.debug.print("row[1]: {s}{s}{s}{s}\n", .{ rows[1][0], rows[1][1], rows[1][2], rows[1][3] });
     }
 
     // print table
     var table: Table = .init(
+        stdout,
+        rows_count,
         @intCast(gap),
         header_items,
         rows,
     );
-    try table.print_header(stdout);
-    try table.print_rows(stdout);
+
+    // for(rows) |row| {
+    //     std.debug.print("row[{d}]: {s}", .{, row})
+    // }
+
+    try table.print_header();
+    try table.print_rows();
     try stdout.flush();
 }
 
@@ -210,7 +254,7 @@ pub fn display_items(stdout: *std.Io.Writer, io: *const std.Io) !void {
 //     const date_time: DateTime = .init(time);
 //
 //     const formated = try std.fmt.bufPrint(buf[0..1024], "{s} {d} {d}:{:0>2}:{:0>2}", .{ date_time.month, date_time.day, date_time.hour, date_time.minutes, date_time.seconds });
-//     try std.testing.expect(std.mem.eql(u8, formated, TableFormating.time_format.get()));
+//     try std.testing.expect(std.mem.eql(u8, formated, HeaderItems.time_format.get()));
 // }
 
 // test "display items" {
